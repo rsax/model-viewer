@@ -13,11 +13,11 @@
  * limitations under the License.
  */
 
-const {nodeResolve: resolve} = require('@rollup/plugin-node-resolve');
-const replace = require('@rollup/plugin-replace');
-const externalGlobals = require('rollup-plugin-external-globals');
-const {basename} = require('path');
-const commonjs = require('@rollup/plugin-commonjs')
+import commonjs from '@rollup/plugin-commonjs';
+import {nodeResolve as resolve} from '@rollup/plugin-node-resolve';
+import replace from '@rollup/plugin-replace';
+import {basename} from 'path';
+import externalGlobals from 'rollup-plugin-external-globals';
 
 const onwarn = (warning, warn) => {
   // Suppress non-actionable warning caused by TypeScript boilerplate:
@@ -29,7 +29,7 @@ const onwarn = (warning, warn) => {
 const plugins = [
   commonjs(),
   resolve({preferBuiltins: true, browser: true}),
-  replace({'Reflect.decorate': 'undefined'}),
+  replace({'Reflect.decorate': 'undefined', preventAssignment: true}),
   externalGlobals({filament: 'Filament'})
 ];
 
