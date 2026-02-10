@@ -66,6 +66,7 @@ export class Shadow extends Object3D {
   private maxDimension = 0;
   private isAnimated = false;
   public needsUpdate = false;
+  private hiddenForShadow: Array<{obj: Object3D, visible: boolean}> = [];
 
   constructor(scene: ModelScene, softness: number, side: Side) {
     super();
@@ -274,8 +275,57 @@ export class Shadow extends Object3D {
     return 0.001 * this.maxDimension;
   }
 
+  /**
+   * Determines if a mesh should be excluded from shadow casting because all
+   * its materials are effectively invisible (fully transparent).
+   */
+  private shouldExcludeFromShadow(obj: Object3D): boolean {
+    const mesh = obj as any;
+    if (!mesh.isMesh) return false;
+
+    const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    if (materials.length === 0) return false;
+
+    // Exclude only if all materials are fully transparent/invisible
+    return materials.every((m: any) => {
+      if (!m) return false;
+      if (m.transparent !== true) return false;
+      const opacity = typeof m.opacity === "number" ? m.opacity : 1;
+      if (opacity > 1e-4) return false;
+      // If alphaTest is used, it can still cast a masked shadow; do not exclude.
+      if (typeof m.alphaTest === "number" && m.alphaTest > 0) return false;
+      return true;
+    });
+  }
+
+  /**
+   * Hides meshes that are effectively invisible before the shadow pass.
+   */
+  private hideInvisibleMeshesForShadowPass(scene: Scene) {
+    this.hiddenForShadow.length = 0;
+    scene.traverse((obj: Object3D) => {
+      if (this.shouldExcludeFromShadow(obj)) {
+        this.hiddenForShadow.push({obj, visible: obj.visible});
+        obj.visible = false;
+      }
+    });
+  }
+
+  /**
+   * Restores visibility of meshes that were hidden during the shadow pass.
+   */
+  private restoreInvisibleMeshesAfterShadowPass() {
+    for (const entry of this.hiddenForShadow) {
+      entry.obj.visible = entry.visible;
+    }
+    this.hiddenForShadow.length = 0;
+  }
+
   render(renderer: WebGLRenderer, scene: Scene) {
     // this.cameraHelper.visible = false;
+
+    // Hide meshes with fully transparent materials before shadow pass
+    this.hideInvisibleMeshesForShadowPass(scene);
 
     // force the depthMaterial to everything
     scene.overrideMaterial = this.depthMaterial;
@@ -297,6 +347,9 @@ export class Shadow extends Object3D {
     // and reset the override material
     scene.overrideMaterial = null;
     this.floor.visible = true;
+
+    // Restore visibility of meshes that were hidden during shadow pass
+    this.restoreInvisibleMeshesAfterShadowPass();
 
     this.blurShadow(renderer);
 
